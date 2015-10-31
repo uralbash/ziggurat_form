@@ -136,7 +136,8 @@ class ZigguratForm(object):
         validate_widget(self.widget, self)
 
         try:
-            self.deserialized_data = self.schema_instance.deserialize(self.coerced_data_holder)
+            self.deserialized_data = self.schema_instance.deserialize(
+                self.coerced_data_holder)
         except colander.Invalid as exc:
             self.valid = False
             self.schema_errors = exc.asdict()

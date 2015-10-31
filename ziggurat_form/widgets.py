@@ -13,7 +13,8 @@ def while_parent(widget, path):
         path.append(str(widget.position))
     else:
         path.append(widget.name)
-    if widget.parent_widget and not isinstance(widget.parent_widget, FormWidget):
+    if widget.parent_widget\
+            and not isinstance(widget.parent_widget, FormWidget):
         while_parent(widget.parent_widget, path)
     return path
 
@@ -22,6 +23,7 @@ class DummyNode(object):
     def __init__(self, name, widget=None):
         self.name = name
         self.widget = widget
+        self.missing = ''
         self.required = colander.required
 
 
@@ -62,7 +64,10 @@ class BaseWidget(object):
         return clone
 
     def coerce(self):
-        pass
+        if self.coerced_data:
+            return
+        elif self.node.missing != colander.required:
+            self.form.coerced_data_holder[self.name] = self.node.missing
 
     def validate(self):
         """
@@ -346,7 +351,8 @@ def confirm_validator(field):
 class ConfirmWidget(MappingWidget):
     _marker_type = 'mapping'
 
-    def __init__(self, widget_to_confirm, blank_confirm_widget=True, *args, **kwargs):
+    def __init__(self, widget_to_confirm, blank_confirm_widget=True,
+                 *args, **kwargs):
         super(ConfirmWidget, self).__init__(*args, **kwargs)
         self.widget_to_confirm = widget_to_confirm
         self.org_node = None
