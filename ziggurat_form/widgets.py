@@ -1,11 +1,28 @@
 import copy
 import logging
+import collections
+from functools import reduce
 
 import colander
 import webhelpers2.html.tags as tags
 from ziggurat_form.exceptions import FormInvalid
 
 log = logging.getLogger(__name__)
+
+
+def update_dict(orig_dict, new_dict):
+    """
+    Merge dicts.
+    """
+    for key, val in new_dict.items():
+        if isinstance(val, collections.Mapping):
+            tmp = update_dict(orig_dict.get(key, {}), val)
+            orig_dict[key] = tmp
+        elif isinstance(val, list):
+            orig_dict[key] = (orig_dict[key] + val)
+        else:
+            orig_dict[key] = new_dict[key]
+    return orig_dict
 
 
 def while_parent(widget, path):
@@ -16,7 +33,17 @@ def while_parent(widget, path):
     if widget.parent_widget\
             and not isinstance(widget.parent_widget, FormWidget):
         while_parent(widget.parent_widget, path)
-    return path
+    return list(reversed(path))
+
+
+def current_path_data(widget, value):
+    """
+    Conver list to nested sets:
+
+        ['music', 'title'] - > {'music': {'title': value}}
+    """
+    return reduce(lambda x, y: {y: x},
+                  reversed(while_parent(widget, []) + [value]))
 
 
 class DummyNode(object):
@@ -24,6 +51,8 @@ class DummyNode(object):
         self.name = name
         self.widget = widget
         self.missing = ''
+        self.default = ''
+        self.description = ''
         self.required = colander.required
 
 
@@ -67,7 +96,7 @@ class BaseWidget(object):
         if self.coerced_data:
             return
         elif self.node.missing != colander.required:
-            self.form.coerced_data_holder[self.name] = self.node.missing
+            self.coerced_data = self.node.missing
 
     def validate(self):
         """
@@ -99,7 +128,7 @@ class BaseWidget(object):
 
     @property
     def error_path(self):
-        path = '.'.join(reversed(while_parent(self, [])))
+        path = '.'.join(while_parent(self, []))
         if path.startswith('.'):
             return path[1:]
         return path
@@ -148,18 +177,28 @@ class BaseWidget(object):
         if not p_widget:
             return
 
+        value = None
         data = p_widget.data
 
         if self.position is not None:
             if data and len(data) > self.position:
-                return data[self.position]
+                value = data[self.position]
         elif parent_is_mapping:
             if data and hasattr(data, 'get'):
-                return data.get(self.name)
+                value = data.get(self.name)
             elif data:
-                return data
+                value = data
         else:
             log.error('something went wrong with field {}'.format(self.name))
+            return
+        return value or self.node.default
+
+    @data.setter
+    def data(self, data):
+        update_dict(
+            self.form.non_coerced_data,
+            current_path_data(self, data)
+        )
 
     @property
     def coerced_data(self):
@@ -179,6 +218,13 @@ class BaseWidget(object):
                 return data.get(self.name)
         else:
             log.error('something went wrong with field {}'.format(self.name))
+
+    @coerced_data.setter
+    def coerced_data(self, coerced_data):
+        update_dict(
+            self.form.coerced_data_holder,
+            current_path_data(self, coerced_data)
+        )
 
 
 class MappingWidget(BaseWidget):

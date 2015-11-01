@@ -12,6 +12,13 @@ from ziggurat_form.widgets import (
 )
 
 
+def widget_recursive(widget, form, func):
+    func(widget, form)
+    if widget.children:
+        for child_widget in widget.children:
+            widget_recursive(child_widget, form, func)
+
+
 class ZigguratForm(object):
     def __init__(self, schema_cls, bind_values=None, after_bind_callback=None):
         self.schema_cls = schema_cls
@@ -58,12 +65,12 @@ class ZigguratForm(object):
 
     def set_nodes(self):
         """ Creates links between widgets and schema nodes """
-        self.schema_instance.widget = FormWidget()
-        self.schema_instance.widget.node = weakref.proxy(self.schema_instance)
-        self.schema_instance.widget.form = weakref.proxy(self)
-        self.schema_instance.widget.non_coerced_data = self.non_coerced_data
-        self.schema_instance.widget.coerced_data_holder = self.coerced_data_holder
-        self.widget = self.schema_instance.widget
+        schema_widget = self.schema_instance.widget = FormWidget()
+        schema_widget.node = weakref.proxy(self.schema_instance)
+        schema_widget.form = weakref.proxy(self)
+        schema_widget.non_coerced_data = self.non_coerced_data
+        schema_widget.coerced_data_holder = self.coerced_data_holder
+        self.widget = schema_widget
 
         for path in self.paths():
             for i, leaf in enumerate(path):
@@ -96,14 +103,7 @@ class ZigguratForm(object):
             self.non_coerced_data = parsed_data
         self.coerced_data_holder = copy.deepcopy(self.non_coerced_data)
         self.set_nodes()
-
-        def coerce_recursive(widget, form):
-            widget.coerce()
-            if widget.children:
-                for child_widget in widget.children:
-                    coerce_recursive(child_widget, form)
-
-        coerce_recursive(self.widget, self)
+        widget_recursive(self.widget, self, lambda w, f: w.coerce())
 
         # for field in self.field_names:
         #     if field in struct:
